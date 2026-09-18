@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# Secrets. Never commit credentials. See .env.example for required variables.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.env
+secrets/
+*.pem
+*.key
+*.p12
+credentials.json
+service-account*.json
+.netrc
+
+# ---------------------------------------------------------------------------
+# Experimental output.
+#
+# Run directories hold raw evidence and are intentionally NOT tracked by git by
+# default: they can be large, they are append-only artifacts rather than source,
+# and they may contain model output you have not reviewed yet.
+#
+# To publish a specific run as evidence, force-add it deliberately:
+#     git add -f runs/<experiment-id>/<run-id>
+# ---------------------------------------------------------------------------
+runs/*
+!runs/.gitkeep
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
