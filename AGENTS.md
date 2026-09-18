@@ -179,9 +179,32 @@ This is the most common task you will be asked to do.
    ```
 
 7. **Add a test** asserting your experiment loads and that its conditions
-   differ only by the manipulation. Copy the pattern from
-   `test_shipped_experiment_conditions_differ_only_by_the_manipulation` in
-   `tests/test_spec.py`.
+   differ only by the manipulation. Copy the patterns from `tests/test_spec.py`.
+
+   Checking that the right *pieces* are present is not enough — it passes
+   even if the treatment gained an extra blank line, lost one, or changed the
+   indentation of the shared portion. Layout drift is a second, uncontrolled
+   manipulation, and it looks harmless in a diff. Assert **byte-level suffix
+   equality** instead:
+
+   ```python
+   control = spec.condition_by_id("control").user_template
+   treatment = spec.condition_by_id("treatment").user_template
+   assert treatment.endswith(control)          # shared portion byte-identical
+   preamble = treatment[: -len(control)]
+   assert preamble.endswith("\n\n")            # exactly one blank line
+   assert not preamble.endswith("\n\n\n")
+   ```
+
+   That catches whitespace drift in either direction. See
+   `test_shipped_experiment_treatment_is_the_control_plus_only_a_preamble` and
+   `test_shipped_experiment_uses_one_separator_style_across_conditions` for the
+   full pattern, including a per-separator check whose failure message names
+   the exact separator that drifted.
+
+   When a condition genuinely cannot share the control's layout, say so in the
+   experiment's `notes` — an intentional asymmetry documented in the spec is
+   defensible; an undocumented one is a confound.
 
 8. **Tell the owner what you designed and why**, including the confound you
    identified and how you controlled for it. He reviews designs before they run.

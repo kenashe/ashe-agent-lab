@@ -287,6 +287,89 @@ def test_shipped_experiment_conditions_differ_only_by_the_manipulation():
     assert "fact-check" not in control.user_template.lower()
 
 
+def test_shipped_experiment_treatment_is_the_control_plus_only_a_preamble():
+    """The treatment template must be *byte-identical* to the control, plus a preamble.
+
+    The assertion above checks that the right pieces are present. That is not
+    enough: it would happily pass if the treatment gained an extra blank line
+    between {{question}} and {{answer_instruction}}, or lost one, or changed
+    the indentation of the shared portion. Any of those is an uncontrolled
+    second manipulation - the treatment would differ from the control in
+    layout as well as in content, and a measured difference could be caused by
+    either.
+
+    Expressing the requirement as exact suffix equality catches whitespace and
+    layout drift in *either* direction, including drift introduced by editing
+    the YAML block scalars, which is exactly the kind of change that looks
+    harmless in a diff.
+    """
+    spec = load_spec(os.path.join(REPO_ROOT, "experiments", "fact-check-awareness-001"))
+    control = spec.condition_by_id("control").user_template
+    treatment = spec.condition_by_id("fact-check-announced").user_template
+
+    assert treatment.endswith(control), (
+        "the treatment template's shared portion is no longer byte-identical to "
+        "the control's, so the two conditions differ in layout as well as in the "
+        "intended manipulation.\n"
+        "  control            : {0!r}\n"
+        "  treatment tail     : {1!r}\n"
+        "Make the common portion identical, or state explicitly in the "
+        "experiment notes why it must differ.".format(control, treatment[-len(control):])
+    )
+
+    preamble = treatment[: -len(control)]
+    assert "fact-check" in preamble.lower(), (
+        "the only text the treatment adds must be the fact-check announcement; "
+        "found preamble {0!r}".format(preamble)
+    )
+    assert preamble.endswith("\n\n"), (
+        "the preamble must be separated from the shared portion by exactly one "
+        "blank line, matching the separator used inside the shared portion; "
+        "found {0!r}".format(preamble[-4:])
+    )
+    assert not preamble.endswith("\n\n\n"), (
+        "the preamble is separated from the shared portion by more than one "
+        "blank line; found {0!r}".format(preamble[-4:])
+    )
+
+
+def test_shipped_experiment_uses_one_separator_style_across_conditions():
+    """Whitespace around the shared placeholders must match across conditions.
+
+    A second, narrower guard on the same failure mode, asserted directly on the
+    text between the two placeholders every condition shares. It exists because
+    it fails with a message naming the exact separator that drifted, which is
+    faster to act on than a suffix-equality failure when someone has edited the
+    YAML by hand.
+    """
+    spec = load_spec(os.path.join(REPO_ROOT, "experiments", "fact-check-awareness-001"))
+
+    separators = {}
+    for condition in spec.conditions:
+        template = condition.user_template
+        start = template.index("{{question}}") + len("{{question}}")
+        end = template.index("{{answer_instruction}}")
+        separators[condition.id] = template[start:end]
+
+    distinct = set(separators.values())
+    assert len(distinct) == 1, (
+        "conditions disagree on the whitespace between {{question}} and "
+        "{{answer_instruction}}: {0!r}. Every condition must present the "
+        "question and the answer instruction identically.".format(separators)
+    )
+    assert distinct == {"\n\n"}, (
+        "expected exactly one blank line between {{question}} and "
+        "{{answer_instruction}}, got {0!r}".format(distinct)
+    )
+
+    # And no condition may sneak in leading or trailing whitespace.
+    for condition in spec.conditions:
+        assert condition.user_template == condition.user_template.strip(), (
+            "condition {0!r} has leading or trailing whitespace in its "
+            "user_template: {1!r}".format(condition.id, condition.user_template)
+        )
+
+
 def test_spec_source_text_is_preserved_verbatim():
     """The snapshot written into a run must be the author's bytes, comments included."""
     path = os.path.join(REPO_ROOT, "experiments", "fact-check-awareness-001")
