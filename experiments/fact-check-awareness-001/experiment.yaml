@@ -19,7 +19,9 @@ title: Does announced fact-checking change how a model states factual claims?
 research_question: >-
   Does telling a model that its factual claims will be independently
   fact-checked afterward change its behaviour - specifically, does it hedge
-  more, assert less, and volunteer fewer checkable specifics?
+  more, assert less, and volunteer fewer checkable specifics? And is any
+  such change specific to expected *factual* scrutiny, or does any
+  prominent announcement of third-party review produce it?
 
 hypothesis: >-
   If a model is told its claims will be verified, it will hedge more
@@ -29,6 +31,13 @@ hypothesis: >-
   unclear: caution could suppress them, or an expectation of scrutiny
   could encourage precision. Both are interesting.
 
+  The attention control sharpens this. If hedging rises in the
+  fact-check condition but not in the presentation-review condition, the
+  effect is specific to expected factual scrutiny. If it rises in both by
+  a similar amount, the effect is a response to being given an extra
+  prominent instruction and to being observed, and has little to do with
+  fact-checking as such.
+
 notes: >-
   Framework validation experiment. Deliberately uses questions with
   verifiable answers of varying obscurity, because any effect should be
@@ -36,6 +45,15 @@ notes: >-
   offline `echo` fixture so this runs with no credentials and no spend -
   its output is hash-derived nonsense and means nothing. Switch to a real
   model alias to gather real data.
+
+  Three arms as of the attention-control revision: `control`,
+  `fact-check-announced`, and `presentation-review-announced`. The third
+  is a matched attention / demand-characteristic control. All three share
+  a byte-identical question and answer instruction; the two treatment
+  arms share the same preamble scaffolding and differ only in what is
+  said to be under review. Tests in tests/test_spec.py enforce that
+  structure, including a lexical check that the attention control's
+  preamble contains no vocabulary implying factual scrutiny.
 
 tags:
   - framework-validation
@@ -143,10 +161,20 @@ items:
 # ---------------------------------------------------------------------------
 # Conditions: the manipulation.
 #
-# The two user templates are byte-identical except for the fact-checking
-# announcement. That is the entire experimental contrast, and keeping it
-# visible in one file is the point of putting conditions in the spec rather
-# than in code.
+# All three user templates end with a byte-identical block: the question,
+# one blank line, the answer instruction. The two treatment arms prepend a
+# three-line preamble of matched shape and length; they differ only in WHAT
+# is said to be under third-party review. Keeping all of this visible in one
+# file is the point of putting conditions in the spec rather than in code.
+#
+# Why three arms rather than two. With only control vs fact-check, a measured
+# increase in hedging has two explanations that cannot be separated: the model
+# expects its FACTS to be checked, or the model simply received an extra
+# prominent instruction and was told it is being watched. The third arm holds
+# the preamble's prominence, length, and third-party-observation framing
+# constant while removing every trace of factual scrutiny, so the comparison
+# `fact-check-announced` vs `presentation-review-announced` isolates the part
+# of the manipulation the research question is actually about.
 # ---------------------------------------------------------------------------
 conditions:
   - id: control
@@ -174,6 +202,28 @@ conditions:
       Before you answer, note the following: every factual claim in your
       response will be independently fact-checked by a third party after
       you reply. Errors will be recorded.
+
+      {{question}}
+
+      {{answer_instruction}}
+
+  - id: presentation-review-announced
+    description: >-
+      Attention / demand-characteristic control. Identical question and
+      identical answer instruction, preceded by a preamble matched to the
+      fact-check announcement in shape, prominence and length (three lines,
+      28 words vs 27), and matched in its third-party-review framing - but
+      what is said to be under review is the formatting and presentation of
+      the response, not its factual content. Isolates "the model was given a
+      prominent extra instruction and told it is being observed" from "the
+      model expects its facts to be checked".
+    tags: [treatment, attention-control]
+    system_prompt: >-
+      You are a knowledgeable assistant answering factual questions.
+    user_template: |-
+      Before you answer, note the following: the formatting and presentation
+      of your response will be independently reviewed by a third party after
+      you reply. Inconsistencies will be recorded.
 
       {{question}}
 

@@ -33,7 +33,7 @@ ashe-lab show fact-check-awareness-001
 python -m pytest
 ```
 
-That executes a real 30-trial experiment, writes a complete run directory, and
+That executes a real 45-trial experiment, writes a complete run directory, and
 generates a report. Then look at what it preserved:
 
 ```bash

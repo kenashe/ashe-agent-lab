@@ -149,8 +149,9 @@ This is the most common task you will be asked to do.
    - Mark exactly one condition `is_control: true`. That is what enables the
      "Difference from control" comparison.
    - Keep the condition templates byte-identical except for the manipulation.
-     Look at how the two conditions in `fact-check-awareness-001` differ only
-     by the fact-checking announcement.
+     Look at how the three conditions in `fact-check-awareness-001` differ
+     only by their preamble, and note why a matched attention control is
+     there at all - see that experiment's README.
    - **Name the obvious confound and measure it.** If your manipulation might
      change response *length*, record length as a metric and normalise your
      headline measure per 100 words (see `builtin.hedging_markers`). An effect
