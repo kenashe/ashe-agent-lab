@@ -261,7 +261,9 @@ def test_shipped_example_experiment_is_valid():
     assert spec.id == "fact-check-awareness-001"
     assert spec.control_condition is not None
     assert spec.control_condition.id == "control"
-    assert len(spec.conditions) == 2
+    # Three arms: control, the fact-check treatment, and the matched
+    # attention / demand-characteristic control.
+    assert len(spec.conditions) == 3
     assert len(spec.items) >= 3
     assert len(spec.evaluators) >= 4
     assert spec.research_question
@@ -330,6 +332,173 @@ def test_shipped_experiment_treatment_is_the_control_plus_only_a_preamble():
     assert not preamble.endswith("\n\n\n"), (
         "the preamble is separated from the shared portion by more than one "
         "blank line; found {0!r}".format(preamble[-4:])
+    )
+
+
+#: The shipped experiment's arms. Named here so a test failure says which arm
+#: drifted rather than making the reader count list indices.
+_SHIPPED_CONTROL = "control"
+_SHIPPED_TREATMENTS = ("fact-check-announced", "presentation-review-announced")
+
+#: Vocabulary the attention control's preamble must not contain. The whole
+#: point of that arm is to hold prominence and third-party observation
+#: constant while removing every trace of factual scrutiny; a single word from
+#: this list would reintroduce the thing being controlled for and silently
+#: collapse the three-arm design back into two.
+_FACTUAL_SCRUTINY_LEXICON = (
+    "fact",
+    "accura",
+    "accurate",
+    "verif",
+    "true",
+    "truth",
+    "correct",
+    "incorrect",
+    "error",
+    "mistake",
+    "evidence",
+    "cite",
+    "citation",
+    "source",
+    "uncertain",
+    "certainty",
+    "claim",
+    "check",
+    "confirm",
+    "validat",
+    "misinform",
+    "false",
+)
+
+
+def test_shipped_experiment_has_one_control_and_two_matched_treatments():
+    """The three-arm structure itself, asserted explicitly."""
+    spec = load_spec(os.path.join(REPO_ROOT, "experiments", "fact-check-awareness-001"))
+
+    ids = [c.id for c in spec.conditions]
+    assert ids == [_SHIPPED_CONTROL] + list(_SHIPPED_TREATMENTS), (
+        "the shipped experiment's arms changed: {0!r}. Update this test "
+        "deliberately if the design really changed.".format(ids)
+    )
+    assert spec.control_condition is not None
+    assert spec.control_condition.id == _SHIPPED_CONTROL
+
+
+def test_shipped_experiment_every_arm_shares_a_byte_identical_task():
+    """Every arm must end with the control's exact bytes.
+
+    Generalises the two-arm suffix check to all treatments. The question and
+    the answer instruction are the *task*; if any arm presents the task even
+    slightly differently - an extra blank line, changed indentation, a
+    reworded instruction - then that arm differs from the others in more than
+    its preamble, and any measured difference has two candidate causes.
+    """
+    spec = load_spec(os.path.join(REPO_ROOT, "experiments", "fact-check-awareness-001"))
+    control = spec.condition_by_id(_SHIPPED_CONTROL)
+
+    for treatment_id in _SHIPPED_TREATMENTS:
+        treatment = spec.condition_by_id(treatment_id)
+
+        assert treatment.system_prompt == control.system_prompt, (
+            "arm {0!r} has a different system prompt from the control:\n"
+            "  control  : {1!r}\n  treatment: {2!r}".format(
+                treatment_id, control.system_prompt, treatment.system_prompt
+            )
+        )
+        assert treatment.user_template.endswith(control.user_template), (
+            "arm {0!r} no longer ends with the control's exact bytes, so the "
+            "shared task differs between conditions.\n"
+            "  control      : {1!r}\n"
+            "  arm tail     : {2!r}".format(
+                treatment_id,
+                control.user_template,
+                treatment.user_template[-len(control.user_template):],
+            )
+        )
+
+        preamble = treatment.user_template[: -len(control.user_template)]
+        assert preamble.endswith("\n\n"), (
+            "arm {0!r}: preamble must be separated from the shared task by "
+            "exactly one blank line; found {1!r}".format(treatment_id, preamble[-4:])
+        )
+        assert not preamble.endswith("\n\n\n"), (
+            "arm {0!r}: more than one blank line between preamble and shared "
+            "task; found {1!r}".format(treatment_id, preamble[-4:])
+        )
+
+
+def test_shipped_experiment_treatment_preambles_are_matched_for_prominence():
+    """The two preambles must be comparable in length and shape.
+
+    An attention control only controls for prominence if it *is* comparably
+    prominent. A one-line control against a five-line treatment would confound
+    the contrast with sheer instruction volume - the very thing it exists to
+    rule out. A 25% word-count tolerance is loose enough to allow natural
+    phrasing and tight enough to catch a rewrite that changes the register.
+    """
+    spec = load_spec(os.path.join(REPO_ROOT, "experiments", "fact-check-awareness-001"))
+    control = spec.condition_by_id(_SHIPPED_CONTROL).user_template
+
+    preambles = {}
+    for treatment_id in _SHIPPED_TREATMENTS:
+        template = spec.condition_by_id(treatment_id).user_template
+        preambles[treatment_id] = template[: -len(control)]
+
+    counts = {k: len(v.split()) for k, v in preambles.items()}
+    lines = {k: len(v.strip().splitlines()) for k, v in preambles.items()}
+
+    assert len(set(lines.values())) == 1, (
+        "treatment preambles differ in line count {0!r}; they should be "
+        "visually matched blocks".format(lines)
+    )
+
+    low, high = min(counts.values()), max(counts.values())
+    assert high <= low * 1.25, (
+        "treatment preambles are not matched for length: {0!r}. The attention "
+        "control only controls for prominence if it is comparably "
+        "prominent.".format(counts)
+    )
+
+    # Both must frame the review as external and after the fact, which is the
+    # component being held constant.
+    for treatment_id, preamble in preambles.items():
+        lowered = preamble.lower()
+        assert "third party" in lowered, (
+            "arm {0!r}: preamble must keep the third-party framing constant "
+            "across treatments; found {1!r}".format(treatment_id, preamble)
+        )
+
+
+def test_attention_control_preamble_avoids_factual_scrutiny_vocabulary():
+    """The attention control must not smuggle in the thing it controls for.
+
+    This is the test that protects the *meaning* of the three-arm design
+    rather than its layout. If someone rewords the presentation-review
+    preamble and reaches for "we'll check your response" or "inconsistencies
+    or errors", the arm stops being a clean attention control and the
+    experiment quietly loses its ability to answer its own research question.
+    """
+    spec = load_spec(os.path.join(REPO_ROOT, "experiments", "fact-check-awareness-001"))
+    control = spec.condition_by_id(_SHIPPED_CONTROL).user_template
+    attention = spec.condition_by_id("presentation-review-announced").user_template
+    preamble = attention[: -len(control)].lower()
+
+    found = sorted(w for w in _FACTUAL_SCRUTINY_LEXICON if w in preamble)
+    assert not found, (
+        "the attention-control preamble contains vocabulary implying factual "
+        "scrutiny: {0}. That defeats its purpose - it must announce review of "
+        "something unrelated to factual content.\n  preamble: {1!r}".format(
+            found, preamble
+        )
+    )
+
+    # And the fact-check arm must still clearly be about factual scrutiny,
+    # otherwise the two arms have converged from the other direction.
+    treatment = spec.condition_by_id("fact-check-announced").user_template
+    fact_preamble = treatment[: -len(control)].lower()
+    assert "fact" in fact_preamble, (
+        "the fact-check arm's preamble no longer mentions factual checking; "
+        "found {0!r}".format(fact_preamble)
     )
 
 
