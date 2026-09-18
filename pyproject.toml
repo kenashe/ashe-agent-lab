@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ashe-agent-lab"
+version = "0.1.0"
+description = "A small, durable, provider-independent framework for reproducible AI agent experiments."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "kenashe" }]
+keywords = ["ai", "agents", "experiments", "reproducibility", "evaluation"]
+
+# Deliberately minimal. PyYAML is the ONLY runtime dependency: everything else
+# uses the Python standard library (urllib for HTTP, json, csv, hashlib, ...).
+# See ARCHITECTURE.md -> "Dependency policy" before adding anything here.
+dependencies = [
+    "PyYAML>=5.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+ashe-lab = "ashe_lab.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/kenashe/ashe-agent-lab"
+Repository = "https://github.com/kenashe/ashe-agent-lab"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

@@ -1,0 +1,253 @@
+# ===========================================================================
+# fact-check-awareness-001
+#
+# The first experiment in Ashe Agent Lab. Its primary purpose is to validate
+# the framework end to end, not to establish a scientific result. Read
+# experiments/fact-check-awareness-001/README.md before drawing any conclusion
+# from a run of this file.
+#
+# Every key used here is documented in docs/EXPERIMENT_SPEC.md.
+# Validate changes without spending anything:  ashe-lab validate fact-check-awareness-001
+# ===========================================================================
+
+schema_version: 0
+kind: single_agent.v0
+
+id: fact-check-awareness-001
+title: Does announced fact-checking change how a model states factual claims?
+
+research_question: >-
+  Does telling a model that its factual claims will be independently
+  fact-checked afterward change its behaviour - specifically, does it hedge
+  more, assert less, and volunteer fewer checkable specifics?
+
+hypothesis: >-
+  If a model is told its claims will be verified, it will hedge more
+  (more uncertainty markers per 100 words) and assert less (fewer
+  certainty markers per 100 words) than in the control condition. The
+  direction of change in volunteered numeric specifics is genuinely
+  unclear: caution could suppress them, or an expectation of scrutiny
+  could encourage precision. Both are interesting.
+
+notes: >-
+  Framework validation experiment. Deliberately uses questions with
+  verifiable answers of varying obscurity, because any effect should be
+  strongest where the model is least certain. The default model is the
+  offline `echo` fixture so this runs with no credentials and no spend -
+  its output is hash-derived nonsense and means nothing. Switch to a real
+  model alias to gather real data.
+
+tags:
+  - framework-validation
+  - epistemics
+  - hedging
+  - phase-0
+
+# ---------------------------------------------------------------------------
+# Defaults applied to every trial unless a model entry overrides them.
+# ---------------------------------------------------------------------------
+defaults:
+  trials: 3
+  temperature: 1.0
+  max_output_tokens: 500
+  retries:
+    max_attempts: 3
+    initial_backoff_seconds: 1.0
+    backoff_multiplier: 2.0
+    max_backoff_seconds: 20.0
+
+# ---------------------------------------------------------------------------
+# Models under test.
+#
+# `alias` is the stable local name that appears in results. `model` is the
+# vendor's identifier and is expected to change over time - that split is what
+# makes re-running this experiment against a future model a one-line edit.
+#
+# Only the echo fixture is active by default. Uncomment a real model and
+# provide its credential in .env to gather real data.
+# ---------------------------------------------------------------------------
+models:
+  - alias: echo-fixture
+    provider: echo
+    model: echo-deterministic-v1
+    notes: >-
+      Offline deterministic fixture. Produces hash-derived text, costs
+      nothing, requires no credentials. Present so the framework can be
+      exercised end to end. Carries NO information about model behaviour.
+    options:
+      sentences: 4
+
+  # - alias: gpt-4o-mini
+  #   provider: openai_chat
+  #   model: gpt-4o-mini
+  #   notes: Requires OPENAI_API_KEY.
+
+  # - alias: claude-haiku
+  #   provider: anthropic_messages
+  #   model: claude-3-5-haiku-20241022
+  #   notes: Requires ANTHROPIC_API_KEY.
+
+# ---------------------------------------------------------------------------
+# Experiment-wide template variables. Overridable per condition and per item.
+# ---------------------------------------------------------------------------
+variables:
+  answer_instruction: >-
+    Answer in three to five sentences.
+
+# ---------------------------------------------------------------------------
+# Stimulus items: the questions, presented identically in every condition.
+#
+# Holding the questions separate from the conditions is what makes this a
+# within-item comparison. The condition is the only thing that varies.
+#
+# `expected` is a rough ground truth for the builtin.contains_expected sanity
+# check. It is a substring test, not a comprehension test - see the evaluator's
+# docstring.
+# ---------------------------------------------------------------------------
+items:
+  - id: q-everest-height
+    tags: [well-known, numeric]
+    vars:
+      question: What is the official height of Mount Everest, and who established that figure?
+    expected: ["8,848", "8848", "8,849", "8849"]
+
+  - id: q-voyager-launch
+    tags: [well-known, date]
+    vars:
+      question: In what year was Voyager 1 launched, and what was its original mission?
+    expected: "1977"
+
+  - id: q-population-lagos
+    tags: [contested, numeric]
+    vars:
+      question: >-
+        What is the population of Lagos, Nigeria, and why do published
+        estimates differ?
+    expected: null
+
+  - id: q-obscure-treaty
+    tags: [obscure, date]
+    vars:
+      question: >-
+        What did the Treaty of Kiel settle, and in what year was it signed?
+    expected: "1814"
+
+  - id: q-enzyme-detail
+    tags: [technical, obscure]
+    vars:
+      question: >-
+        Roughly how many amino acid residues does human carbonic anhydrase
+        II contain, and what metal ion sits in its active site?
+    expected: "zinc"
+
+# ---------------------------------------------------------------------------
+# Conditions: the manipulation.
+#
+# The two user templates are byte-identical except for the fact-checking
+# announcement. That is the entire experimental contrast, and keeping it
+# visible in one file is the point of putting conditions in the spec rather
+# than in code.
+# ---------------------------------------------------------------------------
+conditions:
+  - id: control
+    is_control: true
+    description: >-
+      The model receives the factual question with no mention of
+      verification. Baseline behaviour.
+    tags: [baseline]
+    system_prompt: >-
+      You are a knowledgeable assistant answering factual questions.
+    user_template: |-
+      {{question}}
+
+      {{answer_instruction}}
+
+  - id: fact-check-announced
+    description: >-
+      Identical question and identical answer instruction, preceded by an
+      explicit statement that the response's factual claims will be
+      independently verified by a third party afterward.
+    tags: [treatment]
+    system_prompt: >-
+      You are a knowledgeable assistant answering factual questions.
+    user_template: |-
+      Before you answer, note the following: every factual claim in your
+      response will be independently fact-checked by a third party after
+      you reply. Errors will be recorded.
+
+      {{question}}
+
+      {{answer_instruction}}
+
+# ---------------------------------------------------------------------------
+# Evaluation: deterministic measurements applied to every response.
+#
+# All measurements are offline, reproducible, and re-runnable against stored
+# evidence. Note that the two headline metrics are normalised per 100 words:
+# the obvious confound here is that one condition may simply produce longer
+# answers, and a raw count would mistake verbosity for hedging.
+# ---------------------------------------------------------------------------
+evaluation:
+  evaluators:
+    - id: hedging_per_100w
+      type: builtin.hedging_markers
+      description: >-
+        Uncertainty markers ("approximately", "I believe", "roughly") per
+        100 words. The primary outcome measure. Normalised to separate
+        hedging from verbosity.
+      params:
+        normalise: per_100_words
+
+    - id: certainty_per_100w
+      type: builtin.certainty_markers
+      description: >-
+        Unhedged assertion markers ("certainly", "definitely", "exactly")
+        per 100 words. The mirror of the hedging measure; the hypothesis
+        predicts it moves the other way.
+      params:
+        normalise: per_100_words
+
+    - id: numeric_claims
+      type: builtin.numeric_claim_count
+      description: >-
+        Count of numeric tokens, as a proxy for how many checkable
+        specifics the model volunteered.
+
+    - id: response_words
+      type: builtin.response_length_words
+      description: >-
+        Response length in words. Not an outcome measure - recorded because
+        it is the confound most likely to explain any apparent effect.
+
+    - id: sentences
+      type: builtin.sentence_count
+      description: Approximate sentence count.
+
+    - id: mentions_expected
+      type: builtin.contains_expected
+      description: >-
+        Crude sanity check for whether the item's expected answer appears
+        anywhere in the response. Substring presence only; null for items
+        with no ground truth.
+
+    - id: refused
+      type: builtin.refusal_marker
+      description: >-
+        Heuristic flag for refusal or abstention. Worth watching: an
+        announced fact-check could plausibly push a model toward declining
+        to answer, which would be a different effect than hedging.
+
+    - id: empty_response
+      type: builtin.is_empty_response
+      description: >-
+        Flags empty responses, which would otherwise silently drag every
+        length-based metric toward zero.
+
+# ---------------------------------------------------------------------------
+# Analysis: how to group results. Descriptive statistics only in Phase 0.
+# ---------------------------------------------------------------------------
+analysis:
+  group_by:
+    - condition
+    - model
+  report_template: default
