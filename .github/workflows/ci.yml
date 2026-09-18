@@ -1,0 +1,51 @@
+# Continuous integration.
+#
+# The whole suite runs offline with no credentials, because the `echo` fixture
+# provider needs neither. That is why no secrets are configured here, and why
+# none should ever be added: a CI job that needs an API key is a CI job that
+# stops working for contributors and forks.
+
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor (3.9) and the current release. A framework meant to still
+        # run in ten years should not silently require the newest interpreter.
+        python-version: ["3.9", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Validate every experiment definition
+        run: python -m ashe_lab validate --all
+
+      - name: Run the test suite
+        run: python -m pytest -q
+
+      - name: Execute the example experiment end to end (offline)
+        run: |
+          python -m ashe_lab run fact-check-awareness-001 --trials 1 --quiet
+          python -m ashe_lab verify fact-check-awareness-001
+          python -m ashe_lab show fact-check-awareness-001
